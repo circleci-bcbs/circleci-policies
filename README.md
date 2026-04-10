@@ -19,19 +19,26 @@ Policies are written in [Rego](https://www.openpolicyagent.org/docs/latest/polic
 
 ## Policies
 
-### `approval_gate_enforcement`
+### `demo_version_check`
 
-Ensures that workflows using approval gates also validate who approved the deployment, preventing unauthorized users from approving production deployments.
+Ensures all CircleCI configs across the org use config version 2.1, which is required for pipeline parameters, orbs, and reusable config features.
 
 | Rule | Enforcement | Description |
 |---|---|---|
-| `require_approval_validation` | Hard fail | Workflows with `type: approval` jobs must include an `approval-gates/validate_approver` job from the [cci-labs/approval-gates](https://github.com/CircleCI-Labs/approval-gates-orb) orb |
-| `require_approval_gates_orb` | Hard fail | The `cci-labs/approval-gates` orb must be declared if approval gates are used |
-| `recommend_deploy_markers` | Soft fail | Deploy jobs should include `circleci run release plan/update` commands for deployment tracking |
+| `require_version_2_1` | Hard fail | Config must specify `version: 2.1` |
+
+**Scoped to:** All projects (org-wide)
+
+### `orb_version_check`
+
+Ensures CircleCI configs use config version 2.1. Same rule as `demo_version_check`, scoped to a specific project.
+
+| Rule | Enforcement | Description |
+|---|---|---|
+| `require_version_2_1` | Hard fail | Config must specify `version: 2.1` |
 
 **Scoped to:**
 - `bcn-webapp` (`2558f172-e538-427c-828a-50973c4536a9`)
-- `uipath-exception-mailer` (`8dee0f6e-2228-4a03-93f7-56742458b49b`)
 
 ## Pipeline
 
@@ -94,7 +101,9 @@ circleci-policies/
 ├── .circleci/
 │   └── config.yml                              # CI/CD pipeline for testing and deploying policies
 ├── policies/
-│   ├── approval_gate_enforcement.rego          # Approval gate validation policy
-│   └── approval_gate_enforcement_test.yaml     # Policy tests
+│   ├── demo_version_check.rego                 # Org-wide config version 2.1 policy
+│   ├── demo_version_check_test.yaml            # Policy tests
+│   ├── orb_version_check.rego                  # bcn-webapp config version 2.1 policy
+│   └── orb_version_check_test.yaml             # Policy tests
 └── README.md
 ```
