@@ -1,0 +1,108 @@
+version: 2.1
+
+# =============================================================================
+# CircleCI Config Policies CI/CD Pipeline
+# =============================================================================
+# Tests policies on every push. Deploys to the org on merges to main.
+#
+# Workflow:
+#   - test-policies: Runs on every push. Validates syntax and runs tests.
+#   - deploy-policies: Runs on main only. Pushes the policy bundle to the org.
+# =============================================================================
+
+parameters:
+  org-id:
+    type: string
+    default: "32bb0be4-8e27-4ec2-9c02-5f09237d2ac4"
+    description: CircleCI organization UUID
+
+jobs:
+  test:
+    docker:
+      - image: cimg/base:current
+    steps:
+      - checkout
+      - run:
+          name: Install CircleCI CLI
+          command: |
+            if ! command -v circleci &> /dev/null; then
+              curl -fLSs https://raw.githubusercontent.com/CircleCI-Public/circleci-cli/main/install.sh | bash
+            fi
+            circleci version
+      - run:
+          name: Run policy tests
+          command: circleci policy test ./policies -v
+      - run:
+          name: Validate against sample configs
+          command: |
+            echo "Validating policy logic with circleci policy eval..."
+            # Create a compliant config for validation
+            cat > /tmp/compliant-config.yml \<<'EOF'
+            _compiled_:
+              meta:
+                project_id: "2558f172-e538-427c-828a-50973c4536a9"
+              jobs: {}
+            orbs:
+              approval-gates: cci-labs/approval-gates@1.0.3
+            workflows:
+              dev-workflow:
+                jobs:
+                  - build: {}
+                  - approve:
+                      type: approval
+                      requires: [build]
+                  - approval-gates/validate_approver:
+                      requires: [approve]
+                  - deploy:
+                      requires: [approval-gates/validate_approver]
+            EOF
+
+            RESULT=$(circleci policy decide ./policies --input /tmp/compliant-config.yml --no-compile 2>&1)
+            echo "$RESULT"
+            echo "$RESULT" | grep -q '"status": "PASS"' || { echo "FAIL: compliant config did not pass"; exit 1; }
+            echo "Compliant config: PASS"
+
+  deploy:
+    docker:
+      - image: cimg/base:current
+    steps:
+      - checkout
+      - run:
+          name: Install CircleCI CLI
+          command: |
+            if ! command -v circleci &> /dev/null; then
+              curl -fLSs https://raw.githubusercontent.com/CircleCI-Public/circleci-cli/main/install.sh | bash
+            fi
+            circleci version
+      - run:
+          name: Diff local vs remote policies
+          command: |
+            circleci policy diff ./policies --owner-id << pipeline.parameters.org-id >> || true
+      - run:
+          name: Push policy bundle to org
+          command: |
+            circleci policy push ./policies --owner-id << pipeline.parameters.org-id >> --no-prompt
+            echo "Policy bundle pushed successfully."
+      - run:
+          name: Verify policy settings
+          command: |
+            circleci policy settings --owner-id << pipeline.parameters.org-id >>
+
+workflows:
+  test-policies:
+    jobs:
+      - test
+
+  deploy-policies:
+    jobs:
+      - test:
+          name: "Test Policies"
+      - deploy:
+          name: "Deploy Policies to Org"
+          requires:
+            - "Test Policies"
+          context:
+            - circleci-api
+          filters:
+            branches:
+              only: main

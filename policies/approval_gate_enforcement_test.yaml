@@ -1,0 +1,134 @@
+# Tests for approval_gate_enforcement policy
+# Run: circleci policy test ./policies -v
+#
+# NOTE: The soft fail rule (recommend_deploy_markers) works correctly in
+# raw OPA evaluation (circleci policy eval) but the local CLI 'decide'
+# command does not surface enable_soft in its decision output. The cloud
+# policy engine handles soft failures properly. Tests below reflect
+# the local CLI behavior; soft failures will appear in the CircleCI UI
+# once the policy is pushed.
+
+test_passes_with_validation_job:
+  input:
+    _compiled_:
+      meta:
+        project_id: "2558f172-e538-427c-828a-50973c4536a9"
+      jobs:
+        deploy:
+          steps:
+            - run:
+                command: "circleci run release plan test"
+    orbs:
+      approval-gates: cci-labs/approval-gates@1.0.3
+    workflows:
+      dev-workflow:
+        jobs:
+          - deploy-dev: {}
+          - approve-sit:
+              type: approval
+              requires:
+                - deploy-dev
+          - approval-gates/validate_approver:
+              name: "Validate SIT Approver"
+              requires:
+                - approve-sit
+          - deploy-sit:
+              requires:
+                - approval-gates/validate_approver
+  decision: &pass
+    status: PASS
+    enabled_rules:
+      - require_approval_gates_orb
+      - require_approval_validation
+
+test_fails_without_validation_job:
+  input:
+    _compiled_:
+      meta:
+        project_id: "2558f172-e538-427c-828a-50973c4536a9"
+      jobs: {}
+    orbs:
+      approval-gates: cci-labs/approval-gates@1.0.3
+    workflows:
+      dev-workflow:
+        jobs:
+          - deploy-dev: {}
+          - approve-sit:
+              type: approval
+              requires:
+                - deploy-dev
+          - deploy-sit:
+              requires:
+                - approve-sit
+  decision:
+    status: HARD_FAIL
+    enabled_rules:
+      - require_approval_gates_orb
+      - require_approval_validation
+    hard_failures:
+      - rule: require_approval_validation
+        reason: "Workflow 'dev-workflow' has approval gates but no approval-gates/validate_approver job. Add the cci-labs/approval-gates orb to validate who approved the deployment."
+
+test_fails_without_orb_declared:
+  input:
+    _compiled_:
+      meta:
+        project_id: "2558f172-e538-427c-828a-50973c4536a9"
+      jobs: {}
+    orbs: {}
+    workflows:
+      prod-workflow:
+        jobs:
+          - download: {}
+          - approve-prod:
+              type: approval
+              requires:
+                - download
+          - deploy-prod:
+              requires:
+                - approve-prod
+  decision:
+    status: HARD_FAIL
+    enabled_rules:
+      - require_approval_gates_orb
+      - require_approval_validation
+    hard_failures:
+      - rule: require_approval_gates_orb
+        reason: "Config uses approval gates but does not declare the cci-labs/approval-gates orb. Add it to ensure approver identity is validated."
+      - rule: require_approval_validation
+        reason: "Workflow 'prod-workflow' has approval gates but no approval-gates/validate_approver job. Add the cci-labs/approval-gates orb to validate who approved the deployment."
+
+test_skips_non_target_projects:
+  input:
+    _compiled_:
+      meta:
+        project_id: "00000000-0000-0000-0000-000000000000"
+      jobs: {}
+    orbs: {}
+    workflows:
+      dev-workflow:
+        jobs:
+          - approve-deploy:
+              type: approval
+          - deploy:
+              requires:
+                - approve-deploy
+  decision:
+    <<: *pass
+
+test_passes_no_approval_gates:
+  input:
+    _compiled_:
+      meta:
+        project_id: "2558f172-e538-427c-828a-50973c4536a9"
+      jobs: {}
+    orbs: {}
+    workflows:
+      build-only:
+        jobs:
+          - build: {}
+          - test:
+              requires:
+                - build
+  decision:
+    <<: *pass
