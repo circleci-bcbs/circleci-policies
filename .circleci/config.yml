@@ -25,10 +25,9 @@ jobs:
       - run:
           name: Install CircleCI CLI
           command: |
-            if ! command -v circleci &> /dev/null; then
-              curl -fLSs https://raw.githubusercontent.com/CircleCI-Public/circleci-cli/main/install.sh | bash
-            fi
+            curl -fLSs https://raw.githubusercontent.com/CircleCI-Public/circleci-cli/main/install.sh | sudo bash
             circleci version
+            circleci policy --help | head -3
       - run:
           name: Run policy tests
           command: circleci policy test ./policies -v
@@ -70,10 +69,15 @@ jobs:
       - run:
           name: Install CircleCI CLI
           command: |
-            if ! command -v circleci &> /dev/null; then
-              curl -fLSs https://raw.githubusercontent.com/CircleCI-Public/circleci-cli/main/install.sh | bash
-            fi
+            curl -fLSs https://raw.githubusercontent.com/CircleCI-Public/circleci-cli/main/install.sh | sudo bash
             circleci version
+            circleci policy --help | head -3
+      - run:
+          name: Configure CLI authentication
+          command: |
+            # The circleci-api context provides CIRCLECI_API_TOKEN.
+            # The CLI reads from CIRCLECI_CLI_TOKEN.
+            echo "export CIRCLECI_CLI_TOKEN=\"${CIRCLECI_API_TOKEN}\"" >> "$BASH_ENV"
       - run:
           name: Diff local vs remote policies
           command: |
