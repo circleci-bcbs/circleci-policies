@@ -29,6 +29,10 @@ jobs:
             circleci version
             circleci policy --help | head -3
       - run:
+          name: Configure CLI authentication
+          command: |
+            echo "export CIRCLECI_CLI_TOKEN=\"${CIRCLECI_API_TOKEN}\"" >> "$BASH_ENV"
+      - run:
           name: Run policy tests
           command: circleci policy test ./policies -v
       - run:
@@ -95,12 +99,16 @@ jobs:
 workflows:
   test-policies:
     jobs:
-      - test
+      - test:
+          context:
+            - circleci-api
 
   deploy-policies:
     jobs:
       - test:
           name: "Test Policies"
+          context:
+            - circleci-api
       - deploy:
           name: "Deploy Policies to Org"
           requires:
