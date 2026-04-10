@@ -31,7 +31,9 @@ jobs:
       - run:
           name: Configure CLI authentication
           command: |
-            echo "export CIRCLECI_CLI_TOKEN=\"${CIRCLECI_API_TOKEN}\"" >> "$BASH_ENV"
+            # Trim any whitespace/newlines from the token value
+            CLEAN_TOKEN=$(echo -n "${CIRCLECI_API_TOKEN}" | tr -d '[:space:]')
+            echo "export CIRCLECI_CLI_TOKEN=\"${CLEAN_TOKEN}\"" >> "$BASH_ENV"
       - run:
           name: Run policy tests
           command: circleci policy test ./policies -v
@@ -81,7 +83,9 @@ jobs:
           command: |
             # The circleci-api context provides CIRCLECI_API_TOKEN.
             # The CLI reads from CIRCLECI_CLI_TOKEN.
-            echo "export CIRCLECI_CLI_TOKEN=\"${CIRCLECI_API_TOKEN}\"" >> "$BASH_ENV"
+            # Trim any whitespace/newlines from the token value
+            CLEAN_TOKEN=$(echo -n "${CIRCLECI_API_TOKEN}" | tr -d '[:space:]')
+            echo "export CIRCLECI_CLI_TOKEN=\"${CLEAN_TOKEN}\"" >> "$BASH_ENV"
       - run:
           name: Diff local vs remote policies
           command: |
