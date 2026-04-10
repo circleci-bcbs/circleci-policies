@@ -3,11 +3,8 @@ version: 2.1
 # =============================================================================
 # CircleCI Config Policies CI/CD Pipeline
 # =============================================================================
-# Tests policies on every push. Deploys to the org on merges to main.
-#
-# Workflow:
-#   - test-policies: Runs on every push. Validates syntax and runs tests.
-#   - deploy-policies: Runs on main only. Pushes the policy bundle to the org.
+# Single workflow that tests on every push and deploys on main.
+# The deploy job has a branch filter so it only runs on main.
 # =============================================================================
 
 parameters:
@@ -27,11 +24,9 @@ jobs:
           command: |
             curl -fLSs https://raw.githubusercontent.com/CircleCI-Public/circleci-cli/main/install.sh | sudo bash
             circleci version
-            circleci policy --help | head -3
       - run:
           name: Configure CLI authentication
           command: |
-            # Trim any whitespace/newlines from the token value
             CLEAN_TOKEN=$(echo -n "${CIRCLECI_API_TOKEN}" | tr -d '[:space:]')
             echo "export CIRCLECI_CLI_TOKEN=\"${CLEAN_TOKEN}\"" >> "$BASH_ENV"
       - run:
@@ -40,9 +35,7 @@ jobs:
       - run:
           name: Validate against sample configs
           command: |
-            echo "Validating policy logic with circleci policy eval..."
-            # Create a compliant config for validation
-            cat > /tmp/compliant-config.yml \<<'EOF'
+            cat > /tmp/compliant.yml \<<'EOF'
             _compiled_:
               meta:
                 project_id: "2558f172-e538-427c-828a-50973c4536a9"
@@ -61,8 +54,7 @@ jobs:
                   - deploy:
                       requires: [approval-gates/validate_approver]
             EOF
-
-            RESULT=$(circleci policy decide ./policies --input /tmp/compliant-config.yml --no-compile 2>&1)
+            RESULT=$(circleci policy decide ./policies --input /tmp/compliant.yml --no-compile 2>&1)
             echo "$RESULT"
             echo "$RESULT" | grep -q '"status": "PASS"' || { echo "FAIL: compliant config did not pass"; exit 1; }
             echo "Compliant config: PASS"
@@ -77,13 +69,9 @@ jobs:
           command: |
             curl -fLSs https://raw.githubusercontent.com/CircleCI-Public/circleci-cli/main/install.sh | sudo bash
             circleci version
-            circleci policy --help | head -3
       - run:
           name: Configure CLI authentication
           command: |
-            # The circleci-api context provides CIRCLECI_API_TOKEN.
-            # The CLI reads from CIRCLECI_CLI_TOKEN.
-            # Trim any whitespace/newlines from the token value
             CLEAN_TOKEN=$(echo -n "${CIRCLECI_API_TOKEN}" | tr -d '[:space:]')
             echo "export CIRCLECI_CLI_TOKEN=\"${CLEAN_TOKEN}\"" >> "$BASH_ENV"
       - run:
@@ -94,20 +82,13 @@ jobs:
           name: Push policy bundle to org
           command: |
             circleci policy push ./policies --owner-id << pipeline.parameters.org-id >> --no-prompt
-            echo "Policy bundle pushed successfully."
       - run:
           name: Verify policy settings
           command: |
             circleci policy settings --owner-id << pipeline.parameters.org-id >>
 
 workflows:
-  test-policies:
-    jobs:
-      - test:
-          context:
-            - circleci-api
-
-  deploy-policies:
+  policy-ci:
     jobs:
       - test:
           name: "Test Policies"
